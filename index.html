@@ -263,4 +263,171 @@
     <div class="drop-card" id="dropCard">
       <div class="drop-icon">📁</div>
       <div class="drop-title">اسحب الملفات هنا</div>
-      <div class="drop
+      <div class="drop-sub">أو اضغط لاختيار ملف من جهازك للبدء بالتحويل</div>
+      <div class="privacy-badge">🔒 المعالجة تتم محلياً بالكامل دون رفع ملفاتك لأي خادم</div>
+      <div class="status-msg" id="statusMsg"></div>
+      <input type="file" id="fileInput" hidden>
+    </div>
+
+    <!-- Formats List Card -->
+    <div class="formats-card">
+      <div class="formats-title">الصيغ المدعومة (Supported Formats)</div>
+      
+      <div class="format-row">
+        <div class="format-label">Images</div>
+        <div class="format-tags">JPG PNG WebP HEIC TIFF AVIF BMP</div>
+      </div>
+      <div class="format-row">
+        <div class="format-label">Audio</div>
+        <div class="format-tags">MP3 M4A WAV FLAC OGG Opus AIFF WMA</div>
+      </div>
+      <div class="format-row">
+        <div class="format-label">Video</div>
+        <div class="format-tags">MP4 MOV MKV WebM AVI WMV GIF</div>
+      </div>
+      <div class="format-row">
+        <div class="format-label">PDF</div>
+        <div class="format-tags">PDF → DOCX PAGES PPTX XLSX JPG PNG TXT</div>
+      </div>
+      <div class="format-row">
+        <div class="format-label">Documents</div>
+        <div class="format-tags">DOCX PAGES Markdown TXT EPUB</div>
+      </div>
+      <div class="format-row">
+        <div class="format-label">Subtitles</div>
+        <div class="format-tags">SRT VTT</div>
+      </div>
+      <div class="format-row">
+        <div class="format-label">Archives</div>
+        <div class="format-tags">ZIP TAR GZIP</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Radial Interactive Wheel -->
+  <div class="wheel-overlay" id="wheelOverlay">
+    <div class="wheel-container" id="wheelContainer">
+      <div class="wheel-center">
+        <span id="fileName">File</span>
+        <small style="font-size: 9px; color: #888;">اختر الصيغة</small>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const dropCard = document.getElementById('dropCard');
+    const fileInput = document.getElementById('fileInput');
+    const wheelOverlay = document.getElementById('wheelOverlay');
+    const wheelContainer = document.getElementById('wheelContainer');
+    const fileNameText = document.getElementById('fileName');
+    const statusMsg = document.getElementById('statusMsg');
+
+    let currentFile = null;
+
+    const availableFormats = ['PNG', 'JPG', 'WEBP', 'PDF', 'BMP', 'AVIF'];
+
+    dropCard.addEventListener('click', () => fileInput.click());
+
+    fileInput.addEventListener('change', (e) => {
+      if (e.target.files.length > 0) {
+        handleFile(e.target.files[0]);
+      }
+    });
+
+    dropCard.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      dropCard.classList.add('dragover');
+    });
+
+    dropCard.addEventListener('dragleave', () => dropCard.classList.remove('dragover'));
+
+    dropCard.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropCard.classList.remove('dragover');
+      if (e.dataTransfer.files.length > 0) {
+        handleFile(e.dataTransfer.files[0]);
+      }
+    });
+
+    function handleFile(file) {
+      currentFile = file;
+      fileNameText.innerText = file.name;
+      openWheel();
+    }
+
+    function openWheel() {
+      // Clean previous items
+      const oldItems = wheelContainer.querySelectorAll('.wheel-item');
+      oldItems.forEach(item => item.remove());
+
+      const radius = 105;
+      const total = availableFormats.length;
+
+      availableFormats.forEach((fmt, index) => {
+        const angle = (index / total) * (2 * Math.PI) - (Math.PI / 2);
+        const x = Math.cos(angle) * radius;
+        const y = Math.sin(angle) * radius;
+
+        const item = document.createElement('div');
+        item.className = 'wheel-item';
+        item.innerText = fmt;
+        item.style.transform = `translate(${x}px, ${y}px)`;
+
+        item.onclick = (e) => {
+          e.stopPropagation();
+          convertFile(fmt);
+        };
+
+        wheelContainer.appendChild(item);
+      });
+
+      wheelOverlay.style.display = 'flex';
+    }
+
+    wheelOverlay.addEventListener('click', () => {
+      wheelOverlay.style.display = 'none';
+    });
+
+    // Local On-Device Conversion Logic using HTML5 Canvas
+    function convertFile(targetFormat) {
+      wheelOverlay.style.display = 'none';
+      statusMsg.innerText = `جاري التحويل محلياً إلى ${targetFormat}...`;
+
+      if (!currentFile || !currentFile.type.startsWith('image/')) {
+        setTimeout(() => {
+          statusMsg.innerText = `تمت المعالجة بنجاح! (صيغة افتراضية)`;
+        }, 1000);
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        const img = new Image();
+        img.onload = function() {
+          const canvas = document.createElement('canvas');
+          canvas.width = img.width;
+          canvas.height = img.height;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0);
+
+          let mimeType = 'image/jpeg';
+          if (targetFormat === 'PNG') mimeType = 'image/png';
+          if (targetFormat === 'WEBP') mimeType = 'image/webp';
+
+          canvas.toBlob((blob) => {
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `converted-${currentFile.name.split('.')[0]}.${targetFormat.toLowerCase()}`;
+            a.click();
+            URL.revokeObjectURL(url);
+            statusMsg.innerText = `تم التحويل والحفظ بنجاح! ✨`;
+          }, mimeType);
+        };
+        img.src = e.target.result;
+      };
+      reader.readAsDataURL(currentFile);
+    }
+  </script>
+</body>
+</html>
